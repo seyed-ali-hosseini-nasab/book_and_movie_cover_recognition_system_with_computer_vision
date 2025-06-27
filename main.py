@@ -1,4 +1,5 @@
-from src.presentation.cli.main import main
+from src.presentation.gui.app import BookCoverRecognitionApp
 
 if __name__ == "__main__":
-    main()
+    app = BookCoverRecognitionApp()
+    app.mainloop()
