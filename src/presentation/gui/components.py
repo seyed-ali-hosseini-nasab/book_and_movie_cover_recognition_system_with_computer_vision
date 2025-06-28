@@ -3,18 +3,16 @@ from tkinter import ttk, filedialog
 from PIL import Image, ImageTk
 import os
 
-class ScrollableFrame(ttk.Frame):
-    """فریم قابل اسکرول عمودی"""
 
+class ScrollableFrame(ttk.Frame):
     def __init__(self, parent, **kwargs):
         super().__init__(parent, **kwargs)
 
-        # ایجاد Canvas و Scrollbar
         self.canvas = tk.Canvas(self, highlightthickness=0)
         self.scrollbar = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
         self.scrollable_frame = ttk.Frame(self.canvas)
 
-        # پیکربندی اسکرول
+        # Scroll configuration
         self.scrollable_frame.bind(
             "<Configure>",
             lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all"))
@@ -23,11 +21,11 @@ class ScrollableFrame(ttk.Frame):
         self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
         self.canvas.configure(yscrollcommand=self.scrollbar.set)
 
-        # چیدمان
+        # Layout
         self.canvas.pack(side="left", fill="both", expand=True)
         self.scrollbar.pack(side="right", fill="y")
 
-        # پشتیبانی از اسکرول موس
+        # Mouse scrolling support
         self.bind_mousewheel()
 
     def bind_mousewheel(self):
@@ -45,8 +43,6 @@ class ScrollableFrame(ttk.Frame):
 
 
 class ImageSelector(ttk.Frame):
-    """کادری برای انتخاب فایل یا پوشه تصاویر"""
-
     def __init__(self, parent, title, default_path="", is_folder=False):
         super().__init__(parent)
         self.title = title
@@ -55,29 +51,29 @@ class ImageSelector(ttk.Frame):
         self.selected_paths = []
         self.create_widgets()
 
-        # بارگذاری پیش‌فرض اگر موجود باشد
+        # Default loading if available
         if default_path and os.path.exists(default_path):
             self.load_default_path()
 
     def create_widgets(self):
-        # عنوان
+        # Title
         title_frame = ttk.Frame(self)
         title_frame.pack(fill=tk.X, pady=5)
         ttk.Label(title_frame, text=self.title, font=("Arial", 12, "bold")).pack(side=tk.RIGHT)
 
-        # دکمه‌ها
+        # Buttons
         button_frame = ttk.Frame(self)
         button_frame.pack(fill=tk.X, pady=5)
         ttk.Button(button_frame, text="انتخاب از فایل‌ها", command=self.select_files).pack(side=tk.RIGHT, padx=5)
         if self.default_path:
-            ttk.Button(button_frame, text="استفاده از پیش‌فرض", command=self.load_default_path).pack(side=tk.RIGHT, padx=5)
+            ttk.Button(button_frame, text="استفاده از پیش‌فرض", command=self.load_default_path).pack(side=tk.RIGHT,
+                                                                                                     padx=5)
 
-        # لیست فایل‌های انتخاب شده
+        # List of selected files
         self.listbox = tk.Listbox(self, width=50, height=3, font=("Tahoma", 9))
         self.listbox.pack(pady=5, fill=tk.BOTH, expand=True)
 
     def load_default_path(self):
-        """بارگذاری تمام تصاویر از مسیر پیش‌فرض"""
         if self.is_folder and os.path.isdir(self.default_path):
             self.selected_paths = [
                 os.path.join(self.default_path, f)
@@ -89,7 +85,6 @@ class ImageSelector(ttk.Frame):
         self.update_listbox()
 
     def select_files(self):
-        """انتخاب دستی فایل‌ها یا پوشه"""
         if self.is_folder:
             folder = filedialog.askdirectory(initialdir=self.default_path or ".")
             if folder:
@@ -107,15 +102,12 @@ class ImageSelector(ttk.Frame):
         self.update_listbox()
 
     def update_listbox(self):
-        """به‌روزرسانی لیست‌باکس با نام فایل‌های انتخاب شده"""
         self.listbox.delete(0, tk.END)
         for path in self.selected_paths:
             self.listbox.insert(tk.END, os.path.basename(path))
 
 
 class ProgressDialog:
-    """دیالوگ نمایش پیشرفت پردازش"""
-
     def __init__(self, parent, title="در حال پردازش..."):
         self.window = tk.Toplevel(parent)
         self.window.title(title)
@@ -124,7 +116,7 @@ class ProgressDialog:
         self.window.transient(parent)
         self.window.grab_set()
 
-        # مرکز کردن پنجره
+        # Center the window
         self.window.geometry("+{}+{}".format(
             parent.winfo_rootx() + 50,
             parent.winfo_rooty() + 50
@@ -145,7 +137,6 @@ class ProgressDialog:
         self.percent_label.pack(pady=5)
 
     def update_progress(self, current, total, status="در حال پردازش..."):
-        """به‌روزرسانی نوار پیشرفت و وضعیت"""
         if total > 0:
             percent = (current / total) * 100
             self.progress['value'] = percent
@@ -154,13 +145,10 @@ class ProgressDialog:
         self.window.update()
 
     def close(self):
-        """بستن دیالوگ"""
         self.window.destroy()
 
 
 class ResultsDisplay(ttk.Frame):
-    """نمایش نتایج تشخیص با امکان اسکرول عمودی"""
-
     def __init__(self, parent):
         super().__init__(parent)
         self.create_widgets()
@@ -175,7 +163,6 @@ class ResultsDisplay(ttk.Frame):
         self.results_container = self.scroll_frame.scrollable_frame
 
     def clear_results(self):
-        """پاک کردن نتایج قبلی"""
         for widget in self.results_container.winfo_children():
             widget.destroy()
 
@@ -207,7 +194,8 @@ class ResultsDisplay(ttk.Frame):
         # بخش اطلاعات
         info_frame = ttk.Frame(result_frame)
         info_frame.pack(fill=tk.X, pady=5)
-        ttk.Label(info_frame, text=f"نام فایل: {os.path.basename(result_path)}", font=("Tahoma", 9)).pack(side=tk.RIGHT, padx=10)
+        ttk.Label(info_frame, text=f"نام فایل: {os.path.basename(result_path)}", font=("Tahoma", 9)).pack(side=tk.RIGHT,
+                                                                                                          padx=10)
         ttk.Label(info_frame, text=f"تعداد تطبیق‌ها: {matches}", font=("Tahoma", 9)).pack(side=tk.RIGHT, padx=10)
 
         # نمایش پیام خطا در صورت وجود
@@ -220,13 +208,13 @@ class ResultsDisplay(ttk.Frame):
             ).pack(pady=5)
 
     def add_image(self, parent, image_path, size=(150, 150)):
-        """بارگذاری و نمایش تصویر در اندازه‌ی کوچک‌شده"""
+        """Loading and displaying the image in reduced size"""
         try:
             image = Image.open(image_path)
             image.thumbnail(size, Image.Resampling.LANCZOS)
             photo = ImageTk.PhotoImage(image)
             label = ttk.Label(parent, image=photo)
-            label.image = photo  # نگه‌داشتن ارجاع
+            label.image = photo  # Keeping the referral
             label.pack()
         except Exception:
             ttk.Label(parent, text="خطا در بارگذاری تصویر").pack()

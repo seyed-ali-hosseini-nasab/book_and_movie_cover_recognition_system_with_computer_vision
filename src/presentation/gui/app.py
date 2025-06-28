@@ -19,7 +19,7 @@ class BookCoverRecognitionApp(ThemedTk):
         self.grid_columnconfigure(0, weight=1)
         self.geometry("1000x800")
 
-        # تنظیم فونت فارسی
+        # Persian font
         self.option_add("*Font", "Tahoma 10")
 
         self.create_widgets()
@@ -36,17 +36,16 @@ class BookCoverRecognitionApp(ThemedTk):
         )
 
     def create_widgets(self):
-        # قاب اصلی
+        # Main frame
         main_frame = ttk.Frame(self)
         main_frame.grid(row=0, column=0, sticky="nsew", padx=20, pady=20)
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=1)
 
-        # قسمت تنظیمات
+        # Settings section
         settings_frame = ttk.LabelFrame(main_frame, text="تنظیمات ورودی", padding=10)
         settings_frame.pack(fill=tk.X, pady=(0, 10))
 
-        # انتخاب تصویر ورودی
         self.input_selector = ImageSelector(
             settings_frame,
             "تصویر ورودی را انتخاب کنید",
@@ -54,16 +53,15 @@ class BookCoverRecognitionApp(ThemedTk):
         )
         self.input_selector.pack(fill=tk.X, pady=5)
 
-        # انتخاب تصاویر کتاب/فیلم
         self.book_selector = ImageSelector(
             settings_frame,
-            "پوشه تصاویر کتاب/فیلم را انتخاب کنید",
+            "پوشه تصاویر کتاب فیلم را انتخاب کنید",
             default_path="data/book_movie_images",
             is_folder=True
         )
         self.book_selector.pack(fill=tk.X, pady=5)
 
-        # دکمه پردازش
+        # Processing button
         process_frame = ttk.Frame(main_frame)
         process_frame.pack(fill=tk.X, pady=10)
 
@@ -75,7 +73,6 @@ class BookCoverRecognitionApp(ThemedTk):
         ttk.Button(process_frame, text="پاک کردن نتایج",
                    command=self.clear_results).pack(side=tk.RIGHT, padx=5)
 
-        # نمایش نتایج
         self.result_display = ResultsDisplay(main_frame)
         self.result_display.pack(fill=tk.BOTH, expand=True, pady=10)
 
@@ -91,40 +88,37 @@ class BookCoverRecognitionApp(ThemedTk):
             messagebox.showwarning("خطا", "لطفاً تصاویر کتاب/فیلم را انتخاب کنید")
             return
 
-        # غیرفعال کردن دکمه پردازش
         self.process_btn.config(state='disabled')
 
-        # شروع پردازش در thread جداگانه
         thread = threading.Thread(target=self.process_images, args=(input_paths[0], book_paths))
         thread.daemon = True
         thread.start()
 
     def process_images(self, input_path, book_paths):
-        # نمایش دیالوگ پیشرفت
+        # Show progress dialog
         self.after(0, self.show_progress_dialog)
 
         results = []
         total_books = len(book_paths)
 
         for index, book_path in enumerate(book_paths, start=1):
-            # به‌روزرسانی پیشرفت با بستن مسیر در لامبدا
             self.after(
                 0,
                 lambda current=index, total=total_books, path=book_path:
                 self.update_progress(current, total, f"پردازش {os.path.basename(path)}")
             )
 
-            # محاسبه تطبیق برای هر کتاب
+            # Calculating the match for each book
             result = self.use_case.execute_single_comparison(input_path, book_path)
             if result:
                 results.append(result)
 
-        # مرتب‌سازی نتایج بر اساس امتیاز
         results.sort(key=lambda x: x.confidence_score, reverse=True)
 
-        # نمایش نتایج
+        # Show results
         self.after(0, lambda: self.show_results(input_path, results))
 
+        # Close results display
         self.after(0, self.close_progress_dialog)
 
     def show_progress_dialog(self):
@@ -146,7 +140,7 @@ class BookCoverRecognitionApp(ThemedTk):
             messagebox.showinfo("نتیجه", "هیچ تطبیقی یافت نشد")
             return
 
-        # نمایش تمام نتایج
+        # Show all results
         for rank, result in enumerate(results, 1):
             self.result_display.add_result(
                 input_path=input_path,
