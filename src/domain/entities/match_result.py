@@ -12,3 +12,4 @@ class MatchResult:
     good_matches_count: int
     target_image_path: Optional[str] = None
     error_message: Optional[str] = None
+    source_frame_path: Optional[str] = None
