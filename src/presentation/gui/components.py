@@ -8,38 +8,37 @@ class ScrollableFrame(ttk.Frame):
     def __init__(self, parent, **kwargs):
         super().__init__(parent, **kwargs)
 
+        # Create canvas and scrollbar
         self.canvas = tk.Canvas(self, highlightthickness=0)
         self.scrollbar = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
-        self.scrollable_frame = ttk.Frame(self.canvas)
 
-        # Scroll configuration
+        # Frame inside the canvas
+        self.scrollable_frame = ttk.Frame(self.canvas)
         self.scrollable_frame.bind(
             "<Configure>",
             lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all"))
         )
 
+        # Put the inner frame into the canvas
         self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
         self.canvas.configure(yscrollcommand=self.scrollbar.set)
 
-        # Layout
-        self.canvas.pack(side="left", fill="both", expand=True)
+        # Pack scrollbar first to take its own width
         self.scrollbar.pack(side="right", fill="y")
+        # Then pack canvas to fill the rest
+        self.canvas.pack(side="left", fill="both", expand=True)
 
-        # Mouse scrolling support
-        self.bind_mousewheel()
+        # Bind mouse wheel scrolling
+        self._bind_mousewheel()
 
-    def bind_mousewheel(self):
+    def _bind_mousewheel(self):
         def _on_mousewheel(event):
+            # Windows and MacOS: delta is event.delta
+            # Linux: bind to Button-4 and Button-5 instead
             self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
-        def bind_to_mousewheel(event):
-            self.canvas.bind_all("<MouseWheel>", _on_mousewheel)
-
-        def unbind_from_mousewheel(event):
-            self.canvas.unbind_all("<MouseWheel>")
-
-        self.canvas.bind('<Enter>', bind_to_mousewheel)
-        self.canvas.bind('<Leave>', unbind_from_mousewheel)
+        # Bind enter to capture wheel events
+        self.canvas.bind('<Enter>', lambda e: self.canvas.bind_all("<MouseWheel>", _on_mousewheel))
 
 
 class ImageSelector(ttk.Frame):
@@ -158,16 +157,16 @@ class ResultsDisplay(ttk.Frame):
         header_frame.pack(fill=tk.X, pady=10)
         ttk.Label(header_frame, text="نتایج تشخیص", font=("Arial", 14, "bold")).pack(side=tk.RIGHT)
 
-        self.scroll_frame = ScrollableFrame(self)
-        self.scroll_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        self.results_container = self.scroll_frame.scrollable_frame
+        self.results_container = ttk.Frame(self)
+        self.results_container.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
     def clear_results(self):
         for widget in self.results_container.winfo_children():
             widget.destroy()
 
-    def add_result(self, input_path, result_path, confidence, matches, rank, error_message=None):
-        """افزودن یک نتیجه جدید به لیست نتایج"""
+    def add_result(self, input_path, result_path, confidence, matches, rank, error_message=None,
+                   source_frame_path=None):
+        """Add a result with optional video frame display."""
         result_frame = ttk.LabelFrame(
             self.results_container,
             text=f"رتبه {rank} – امتیاز: {confidence:.1f}",
@@ -175,30 +174,37 @@ class ResultsDisplay(ttk.Frame):
         )
         result_frame.pack(fill=tk.X, pady=5, padx=5)
 
-        # بخش تصاویر
+        # images section
         images_frame = ttk.Frame(result_frame)
         images_frame.pack(fill=tk.X, pady=5)
 
-        # تصویر ورودی
+        # input image or video frame
         input_frame = ttk.Frame(images_frame)
         input_frame.pack(side=tk.RIGHT, padx=10)
-        ttk.Label(input_frame, text="تصویر ورودی", font=("Tahoma", 10, "bold")).pack()
-        self.add_image(input_frame, input_path)
 
-        # تصویر تطبیق یافته
+        if source_frame_path:
+            # for video: show the matched frame
+            ttk.Label(input_frame, text="فریم منطبق", font=("Tahoma", 10, "bold")).pack()
+            self.add_image(input_frame, source_frame_path)
+        else:
+            # for image: show the input image
+            ttk.Label(input_frame, text="تصویر ورودی", font=("Tahoma", 10, "bold")).pack()
+            self.add_image(input_frame, input_path)
+
+        # matched book cover
         result_img_frame = ttk.Frame(images_frame)
         result_img_frame.pack(side=tk.RIGHT, padx=10)
-        ttk.Label(result_img_frame, text="تطبیق یافته", font=("Tahoma", 10, "bold")).pack()
+        ttk.Label(result_img_frame, text="جلد کتاب منطبق", font=("Tahoma", 10, "bold")).pack()
         self.add_image(result_img_frame, result_path)
 
-        # بخش اطلاعات
+        # info section
         info_frame = ttk.Frame(result_frame)
         info_frame.pack(fill=tk.X, pady=5)
         ttk.Label(info_frame, text=f"نام فایل: {os.path.basename(result_path)}", font=("Tahoma", 9)).pack(side=tk.RIGHT,
                                                                                                           padx=10)
         ttk.Label(info_frame, text=f"تعداد تطبیق‌ها: {matches}", font=("Tahoma", 9)).pack(side=tk.RIGHT, padx=10)
 
-        # نمایش پیام خطا در صورت وجود
+        # error message if exists
         if error_message:
             ttk.Label(
                 result_frame,
@@ -218,3 +224,16 @@ class ResultsDisplay(ttk.Frame):
             label.pack()
         except Exception:
             ttk.Label(parent, text="خطا در بارگذاری تصویر").pack()
+
+
+class VideoSelector(ImageSelector):
+    def __init__(self, parent, title, default_path=""):
+        super().__init__(parent, title, default_path, is_folder=False)
+
+    def select_files(self):
+        video, = filedialog.askopenfilename(
+            initialdir=self.default_path or ".",
+            filetypes=[("Video files", "*.mp4 *.avi *.mov")],
+        ),
+        self.selected_paths = [video] if video else []
+        self.update_listbox()
