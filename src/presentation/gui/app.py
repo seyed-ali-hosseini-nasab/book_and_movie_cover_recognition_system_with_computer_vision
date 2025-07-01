@@ -18,6 +18,7 @@ from ttkthemes import ThemedTk
 import os
 import threading
 
+
 class BookCoverRecognitionApp(ThemedTk):
     def __init__(self):
         super().__init__(theme="arc")
@@ -46,11 +47,11 @@ class BookCoverRecognitionApp(ThemedTk):
         root_scroll = ScrollableFrame(self)
         root_scroll.pack(fill=tk.BOTH, expand=True)
         container = root_scroll.scrollable_frame
-        container.columnconfigure(0, weight=1,minsize=1080)
+        container.columnconfigure(0, weight=1, minsize=1080)
 
         # settings panel
         settings = ttk.LabelFrame(container, text="تنظیمات ورودی", padding=10)
-        settings.grid(row=0, column=0, sticky="ew", padx=20, pady=(20,10))
+        settings.grid(row=0, column=0, sticky="ew", padx=20, pady=(20, 10))
         settings.columnconfigure(0, weight=1)
 
         # input image selector
@@ -79,35 +80,33 @@ class BookCoverRecognitionApp(ThemedTk):
         self.video_selector.pack(fill=tk.X, pady=5)
 
         # param controls
-        # frame skip
-        param_fs = ttk.Frame(settings)
-        param_fs.pack(fill=tk.X, pady=5)
-        ttk.Label(param_fs, text="Frame Skip:").pack(side=tk.RIGHT)
         self.frame_skip_var = tk.IntVar(value=30)
-        ttk.Spinbox(param_fs, from_=1, to=120, width=5, textvariable=self.frame_skip_var).pack(side=tk.RIGHT, padx=5)
-        ttk.Label(settings,
-                  text="هر چه عدد بیشتر باشد، فریم‌های کمتری پردازش می‌شوند (سرعت↑، دقت↓)",
-                  font=("Tahoma", 8), foreground="gray").pack(fill=tk.X)
-
-        # pHash threshold
-        param_ph = ttk.Frame(settings)
-        param_ph.pack(fill=tk.X, pady=5)
-        ttk.Label(param_ph, text="pHash Thresh:").pack(side=tk.RIGHT)
         self.phash_var = tk.IntVar(value=20)
-        ttk.Spinbox(param_ph, from_=1, to=64, width=5, textvariable=self.phash_var).pack(side=tk.RIGHT, padx=5)
-        ttk.Label(settings,
-                  text="ملاک فاصله هامینگ pHash (کمتر→فیلتر سخت‌تر)",
-                  font=("Tahoma", 8), foreground="gray").pack(fill=tk.X)
-
-        # histogram threshold
-        param_ht = ttk.Frame(settings)
-        param_ht.pack(fill=tk.X, pady=5)
-        ttk.Label(param_ht, text="Hist Thresh:").pack(side=tk.RIGHT)
         self.hist_var = tk.DoubleVar(value=0.3)
-        ttk.Spinbox(param_ht, from_=0.0, to=1.0, increment=0.05, width=5, textvariable=self.hist_var).pack(side=tk.RIGHT, padx=5)
-        ttk.Label(settings,
-                  text="آستانه تغییر هیستوگرام HSV (کمتر→انتخاب فریم‌های بیشتر)",
-                  font=("Tahoma", 8), foreground="gray").pack(fill=tk.X)
+
+        self._build_spinbox(
+            settings,
+            "Frame Skip:",
+            self.frame_skip_var,
+            mn=1, mx=120, step=1,
+            hint="هر چه عدد بیشتر باشد، فریم‌های کمتری پردازش می‌شوند (سرعت↑، دقت↓)"
+        )
+
+        self._build_spinbox(
+            settings,
+            "pHash Thresh:",
+            self.phash_var,
+            mn=1, mx=64, step=1,
+            hint="ملاک فاصله هامینگ pHash (کمتر→فیلتر سخت‌تر)"
+        )
+
+        self._build_spinbox(
+            settings,
+            "Hist Thresh:",
+            self.hist_var,
+            mn=0.0, mx=1.0, step=0.05,
+            hint="آستانه تغییر هیستوگرام HSV (کمتر→انتخاب فریم‌های بیشتر)"
+        )
 
         # action buttons
         actions = ttk.Frame(container)
@@ -130,10 +129,68 @@ class BookCoverRecognitionApp(ThemedTk):
 
         ttk.Button(actions, text="پاک کردن نتایج", command=self.clear_results).pack(side=tk.RIGHT, padx=5)
 
+        ttk.Button(
+            actions,
+            text="پاک کردن کش",
+            command=self.clear_frame_cache
+        ).pack(side=tk.RIGHT, padx=5)
+
         # results display
         self.result_display = ResultsDisplay(container)
-        self.result_display.grid(row=2, column=0, sticky="nsew", padx=20, pady=(0,20))
+        self.result_display.grid(row=2, column=0, sticky="nsew", padx=20, pady=(0, 20))
         container.rowconfigure(2, weight=1)
+
+    def _build_spinbox(self, parent, text, var, mn, mx, step, hint):
+        """
+        Build a Spinbox that automatically clamps its value
+        to the [mn, mx] interval and ignores invalid input.
+        """
+        frm = ttk.Frame(parent)
+        frm.pack(fill=tk.X, pady=5)
+        ttk.Label(frm, text=text).pack(side=tk.RIGHT)
+
+        # register validation callback
+        def _validator(value_if_edit):
+            # empty string → allow temporarily
+            if value_if_edit == "":
+                return True
+            try:
+                v = float(value_if_edit)
+            except ValueError:
+                return False
+            return mn <= v <= mx
+
+        vcmd = (self.register(_validator), "%P")
+
+        spn = ttk.Spinbox(
+            frm,
+            from_=mn,
+            to=mx,
+            increment=step,
+            width=5,
+            textvariable=var,
+            validate="key",
+            validatecommand=vcmd,
+        )
+        spn.pack(side=tk.RIGHT, padx=5)
+
+        # ensure clamping on focus-loss or <Return>
+        def _clamp_event(_):
+            try:
+                v = float(var.get())
+            except ValueError:
+                var.set(mn)
+                return
+            if v < mn:
+                var.set(mn)
+            elif v > mx:
+                var.set(mx)
+
+        spn.bind("<FocusOut>", _clamp_event)
+        spn.bind("<Return>", _clamp_event)
+
+        ttk.Label(parent, text=hint, font=("Tahoma", 8), foreground="gray") \
+            .pack(fill=tk.X)
 
     def start_image_processing(self):
         imgs = self.input_selector.selected_paths
@@ -150,7 +207,7 @@ class BookCoverRecognitionApp(ThemedTk):
         total = len(book_paths)
         for idx, path in enumerate(book_paths, start=1):
             self.after(0, lambda c=idx, t=total, p=path:
-                       self.update_progress(c, t, f"پردازش {os.path.basename(p)}"))
+            self.update_progress(c, t, f"پردازش {os.path.basename(p)}"))
             res = self.book_movie_use_case.execute_single_comparison(img_path, path)
             if res:
                 results.append(res)
@@ -224,6 +281,14 @@ class BookCoverRecognitionApp(ThemedTk):
         self.result_display.clear_results()
         self.process_img_btn.config(state='normal')
         self.process_vid_btn.config(state='normal')
+
+    def clear_frame_cache(self):
+        if self.video_use_case:
+            self.video_use_case.clear_cache()
+            messagebox.showinfo("تکمیل", "کش ویدئو پاک شد")
+        else:
+            messagebox.showwarning("خطا", "ابتدا یک ویدئو پردازش کنید")
+
 
 if __name__ == "__main__":
     app = BookCoverRecognitionApp()
