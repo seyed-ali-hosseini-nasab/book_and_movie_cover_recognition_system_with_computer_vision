@@ -1,121 +1,57 @@
-from typing import List, Optional
+import os
+import cv2
 from src.domain.entities.book_cover import BookCover
 from src.domain.entities.match_result import MatchResult
 from src.application.interfaces.feature_extractor_interface import IFeatureExtractor
 from src.application.interfaces.matcher_interface import IMatcher
 from src.application.interfaces.image_repository_interface import IImageRepository
-import os
-import cv2
 
 
 class FindMatchingBookMovieUseCase:
-    def __init__(self,
-                 feature_extractor: IFeatureExtractor,
-                 matcher: IMatcher,
-                 image_repository: IImageRepository):
+    """
+    Use case for comparing an input image against a single book/movie cover.
+    """
+
+    def __init__(
+        self,
+        feature_extractor: IFeatureExtractor,
+        matcher: IMatcher,
+        image_repository: IImageRepository
+    ):
         self.feature_extractor = feature_extractor
         self.matcher = matcher
         self.image_repository = image_repository
 
-    def execute(self, input_image: str, book_image_paths: Optional[List[str]] = None) -> Optional[MatchResult]:
-        # بارگذاری تصویر ورودی
-        if os.path.isabs(input_image):
-            image = cv2.imread(input_image)
-            if image is None:
-                raise FileNotFoundError(f"Image not found: {input_image}")
-            input_book = BookCover(
-                image_path=input_image,
-                image=image,
-                name=os.path.splitext(os.path.basename(input_image))[0]
-            )
-        else:
-            input_book = self.image_repository.load_input_image(input_image)
-
-        # استخراج ویژگی از تصویر ورودی
-        input_book.keypoints, input_book.descriptors = self.feature_extractor.extract_features(input_book.image)
-
-        # بارگذاری تصاویر کتاب/فیلم
-        if book_image_paths:
-            book_movie_images = []
-            for path in book_image_paths:
-                image = cv2.imread(path)
-                if image is not None:
-                    book = BookCover(
-                        image_path=path,
-                        image=image,
-                        name=os.path.splitext(os.path.basename(path))[0]
-                    )
-                    book_movie_images.append(book)
-        else:
-            book_movie_images = self.image_repository.load_book_movie_images()
-
-        best_match = None
-        best_score = 0
-
-        for book_movie in book_movie_images:
-            book_movie.keypoints, book_movie.descriptors = self.feature_extractor.extract_features(book_movie.image)
-            matches = self.matcher.match_features(input_book.descriptors, book_movie.descriptors)
-
-            if matches:
-                confidence_score = len(matches)
-
-                if confidence_score > best_score:
-                    best_score = confidence_score
-                    best_match = MatchResult(
-                        source_name=input_book.name,
-                        target_name=book_movie.name,
-                        matches=matches,
-                        confidence_score=confidence_score,
-                        good_matches_count=len(matches),
-                        target_image_path=book_movie.image_path
-                    )
-
-        return best_match
-
-    def execute_single_comparison(self, input_image_path: str, book_image_path: str) -> MatchResult:
-        """مقایسه تصویر ورودی با یک تصویر کتاب خاص؛ حتی در صورت خطا ادامه می‌دهد."""
+    def execute_single_comparison(
+        self,
+        input_image_path: str,
+        book_image_path: str
+    ) -> MatchResult:
+        """
+        Compare one input image and one book cover.
+        Always returns a MatchResult, even on error.
+        """
         try:
-            # بارگذاری تصویر ورودی
-            input_image = cv2.imread(input_image_path)
-            if input_image is None:
-                raise FileNotFoundError(f"Cannot load input image: {input_image_path}")
+            src = self._load_cover(input_image_path, is_input=True)
+            dst = self._load_cover(book_image_path, is_input=False)
 
-            input_book = BookCover(
-                image_path=input_image_path,
-                image=input_image,
-                name=os.path.splitext(os.path.basename(input_image_path))[0]
-            )
+            self._describe_cover(src)
+            self._describe_cover(dst)
 
-            # بارگذاری تصویر کتاب
-            book_image = cv2.imread(book_image_path)
-            if book_image is None:
-                raise FileNotFoundError(f"Cannot load book image: {book_image_path}")
-
-            book_cover = BookCover(
-                image_path=book_image_path,
-                image=book_image,
-                name=os.path.splitext(os.path.basename(book_image_path))[0]
-            )
-
-            # استخراج ویژگی‌ها
-            input_book.keypoints, input_book.descriptors = self.feature_extractor.extract_features(input_book.image)
-            book_cover.keypoints, book_cover.descriptors = self.feature_extractor.extract_features(book_cover.image)
-
-            # تطبیق ویژگی‌ها
-            matches = self.matcher.match_features(input_book.descriptors, book_cover.descriptors)
-            confidence = len(matches)
+            matches = self.matcher.match_features(src.descriptors, dst.descriptors)
+            score = len(matches)
 
             return MatchResult(
-                source_name=input_book.name,
-                target_name=book_cover.name,
+                source_name=src.name,
+                target_name=dst.name,
                 matches=matches,
-                confidence_score=confidence,
-                good_matches_count=confidence,
-                target_image_path=book_cover.image_path
+                confidence_score=score,
+                good_matches_count=score,
+                target_image_path=dst.image_path,
+                error_message=None
             )
 
         except Exception as ex:
-            # در صورت هر خطا، پیام خطا را ذخیره می‌کنیم و باز هم ادامه می‌دهیم
             return MatchResult(
                 source_name=os.path.splitext(os.path.basename(input_image_path))[0],
                 target_name=os.path.splitext(os.path.basename(book_image_path))[0],
@@ -125,3 +61,22 @@ class FindMatchingBookMovieUseCase:
                 target_image_path=book_image_path,
                 error_message=str(ex)
             )
+
+    def _load_cover(self, path: str, is_input: bool) -> BookCover:
+        """
+        Load image from disk and wrap in BookCover.
+        Raises FileNotFoundError if load fails.
+        """
+        image = cv2.imread(path)
+        if image is None:
+            raise FileNotFoundError(f"Cannot load {'input' if is_input else 'book'} image: {path}")
+        name = os.path.splitext(os.path.basename(path))[0]
+        return BookCover(image_path=path, image=image, name=name)
+
+    def _describe_cover(self, cover: BookCover) -> None:
+        """
+        Extract keypoints and descriptors for a cover.
+        """
+        kp, desc = self.feature_extractor.extract_features(cover.image)
+        cover.keypoints = kp
+        cover.descriptors = desc
