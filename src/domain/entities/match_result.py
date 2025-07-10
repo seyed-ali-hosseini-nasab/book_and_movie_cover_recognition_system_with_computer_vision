@@ -13,3 +13,5 @@ class MatchResult:
     target_image_path: Optional[str] = None
     error_message: Optional[str] = None
     source_frame_path: Optional[str] = None
+    overlay_image_path: Optional[str] = None
+    source_keypoints: Optional[List] = None
