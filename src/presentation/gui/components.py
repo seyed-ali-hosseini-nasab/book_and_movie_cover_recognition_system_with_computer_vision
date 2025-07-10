@@ -164,9 +164,21 @@ class ResultsDisplay(ttk.Frame):
         for widget in self.results_container.winfo_children():
             widget.destroy()
 
-    def add_result(self, input_path, result_path, confidence, matches, rank, error_message=None,
-                   source_frame_path=None):
-        """Add a result with optional video frame display."""
+    def add_result(
+            self,
+            input_path,
+            result_path,
+            confidence,
+            matches,
+            rank,
+            error_message=None,
+            source_frame_path=None,
+            overlay_image_path=None
+    ):
+        """
+        Add a result entry; show input image, matched cover,
+        and the overlay image if available.
+        """
         result_frame = ttk.LabelFrame(
             self.results_container,
             text=f"رتبه {rank} – امتیاز: {confidence:.1f}",
@@ -174,14 +186,12 @@ class ResultsDisplay(ttk.Frame):
         )
         result_frame.pack(fill=tk.X, pady=5, padx=5)
 
-        # images section
         images_frame = ttk.Frame(result_frame)
         images_frame.pack(fill=tk.X, pady=5)
 
-        # input image or video frame
+        # 1. Original input image or video frame
         input_frame = ttk.Frame(images_frame)
         input_frame.pack(side=tk.RIGHT, padx=10)
-
         if source_frame_path:
             # for video: show the matched frame
             ttk.Label(input_frame, text="فریم منطبق", font=("Tahoma", 10, "bold")).pack()
@@ -191,29 +201,27 @@ class ResultsDisplay(ttk.Frame):
             ttk.Label(input_frame, text="تصویر ورودی", font=("Tahoma", 10, "bold")).pack()
             self.add_image(input_frame, input_path)
 
-        # matched book cover
-        result_img_frame = ttk.Frame(images_frame)
-        result_img_frame.pack(side=tk.RIGHT, padx=10)
-        ttk.Label(result_img_frame, text="جلد کتاب منطبق", font=("Tahoma", 10, "bold")).pack()
-        self.add_image(result_img_frame, result_path)
+        # 2. Matched cover image
+        cover_frame = ttk.Frame(images_frame)
+        cover_frame.pack(side=tk.RIGHT, padx=10)
+        ttk.Label(cover_frame, text="جلد منطبق", font=("Tahoma", 10, "bold")).pack()
+        self.add_image(cover_frame, result_path)
 
-        # info section
+        # 3. Overlay image if exists
+        if overlay_image_path and os.path.exists(overlay_image_path):
+            overlay_frame = ttk.Frame(images_frame)
+            overlay_frame.pack(side=tk.RIGHT, padx=10)
+            ttk.Label(overlay_frame, text="نتیجه همپوشانی", font=("Tahoma", 10, "bold")).pack()
+            self.add_image(overlay_frame, overlay_image_path)
+
+        # Info section
         info_frame = ttk.Frame(result_frame)
         info_frame.pack(fill=tk.X, pady=5)
-        ttk.Label(info_frame, text=f"نام فایل: {os.path.basename(result_path)}", font=("Tahoma", 9)).pack(side=tk.RIGHT,
-                                                                                                          padx=10)
-        ttk.Label(info_frame, text=f"تعداد تطبیق‌ها: {matches}", font=("Tahoma", 9)).pack(side=tk.RIGHT, padx=10)
-
-        # error message if exists
+        ttk.Label(info_frame, text=f"تعداد تطبیق‌ها: {matches}", font=("Tahoma", 9)).pack(side=tk.RIGHT, padx=5)
         if error_message:
-            ttk.Label(
-                result_frame,
-                text=f"خطا: {error_message}",
-                foreground="red",
-                font=("Tahoma", 9, "italic")
-            ).pack(pady=5)
+            ttk.Label(result_frame, text=f"خطا: {error_message}", foreground="red").pack(pady=5)
 
-    def add_image(self, parent, image_path, size=(150, 150)):
+    def add_image(self, parent, image_path, size=(300, 300)):
         """Loading and displaying the image in reduced size"""
         try:
             image = Image.open(image_path)
