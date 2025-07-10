@@ -8,6 +8,7 @@ from src.infrastructure.video_processors.frame_extractor import FrameExtractor
 from src.application.interfaces.feature_extractor_interface import IFeatureExtractor
 from src.application.interfaces.matcher_interface import IMatcher
 from src.domain.entities.match_result import MatchResult
+from src.application.use_cases.overlay_book_cover import OverlayBookCoverUseCase
 
 
 class ProcessVideoUseCase:
@@ -32,38 +33,48 @@ class ProcessVideoUseCase:
         self.book_hashes = self._compute_book_hashes()
         self.cache_dir = Path("data/cache/video_frames_cache")
         self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self.overlay_use_case = OverlayBookCoverUseCase(
+            feature_extractor=self.feature_extractor,
+            matcher=self.matcher
+        )
 
     def execute(self, input_video_name: str) -> List[MatchResult]:
         """
-        Process video: for each keyframe, if cached metadata exists, load it;
-        otherwise compute match, cache both frame image and metadata.
+        Process video: for each keyframe,
+        load cached metadata if exists, otherwise compute match + overlay, cache both.
         """
         video_path = self.video_repo.load_input_video(input_video_name)
         video_name = Path(input_video_name).stem
         results: List[MatchResult] = []
 
-        for idx, frame in enumerate(self.frame_extractor.extract_keyframes(video_path, self.hist_thresh)):
+        for idx, frame in enumerate(self.frame_extractor.extract_keyframes(Path(video_path), self.hist_thresh)):
             meta_path = self._get_metadata_path(video_name, idx)
-            if meta_path.exists():
+            frame_path = self._get_frame_path(video_name, idx)
+
+            if meta_path.exists() and frame_path.exists():
                 # load cached metadata
                 data = json.loads(meta_path.read_text())
-                results.append(MatchResult(
+                result = MatchResult(
                     source_name=data["source_name"],
                     target_name=data["target_name"],
                     matches=[],  # detailed matches not cached
                     confidence_score=data["confidence_score"],
                     good_matches_count=data["good_matches_count"],
                     target_image_path=data["target_image_path"],
-                    source_frame_path=data["source_frame_path"]
-                ))
+                    source_frame_path=data["source_frame_path"],
+                    overlay_image_path=data.get("overlay_image_path")
+                )
+                results.append(result)
                 continue
 
+            # compute pHash and filter candidates
             frame_hash = self._compute_pHash(frame)
             candidates = self._filter_candidates(frame_hash)
             if not candidates:
                 continue
 
-            best = self._find_best_match(frame, candidates, video_name, idx)
+            # find best match and optional overlay
+            best = self._find_best_match_with_overlay(frame, candidates, video_name, idx)
             if best:
                 # cache metadata
                 meta = {
@@ -72,8 +83,11 @@ class ProcessVideoUseCase:
                     "confidence_score": best.confidence_score,
                     "good_matches_count": best.good_matches_count,
                     "target_image_path": best.target_image_path,
-                    "source_frame_path": best.source_frame_path
+                    "source_frame_path": best.source_frame_path,
                 }
+                if best.overlay_image_path:
+                    meta["overlay_image_path"] = best.overlay_image_path
+
                 meta_path.write_text(json.dumps(meta))
                 results.append(best)
 
@@ -98,7 +112,7 @@ class ProcessVideoUseCase:
             if bin(frame_hash ^ bh).count("1") <= self.phash_thresh
         ]
 
-    def _find_best_match(
+    def _find_best_match_with_overlay(
             self,
             frame,
             candidates: List[str],
@@ -112,13 +126,15 @@ class ProcessVideoUseCase:
         for book in self.image_repo.load_book_movie_images():
             if book.name not in candidates:
                 continue
+
             kp_b, desc_b = self.feature_extractor.extract_features(book.image)
             matches = self.matcher.match_features(desc_f, desc_b)
             score = len(matches)
             if score > best_score:
                 best_score = score
+                # save frame
                 frame_path = self._save_frame_if_not_exists(frame, video_name, frame_idx)
-                best_match = MatchResult(
+                result = MatchResult(
                     source_name=f"frame_{frame_idx}",
                     target_name=book.name,
                     matches=matches,
@@ -127,6 +143,16 @@ class ProcessVideoUseCase:
                     target_image_path=book.image_path,
                     source_frame_path=frame_path
                 )
+                # generate overlay if enough matches
+                overlay_img = self.overlay_use_case.overlay_book_on_image(
+                    frame, book, result
+                )
+                if overlay_img is not None:
+                    result.overlay_image_path = self._save_overlay_result(
+                        overlay_img, video_name, frame_idx, book.name
+                    )
+                best_match = result
+
         return best_match
 
     def _get_frame_path(self, video_name: str, frame_idx: int) -> Path:
@@ -140,10 +166,22 @@ class ProcessVideoUseCase:
     def _save_frame_if_not_exists(self, frame, video_name: str, frame_idx: int) -> str:
         path = self._get_frame_path(video_name, frame_idx)
         if not path.exists():
-            success = cv2.imwrite(str(path), frame)
-            if not success:
-                raise IOError(f"Failed to write frame to {path}")
+            cv2.imwrite(str(path), frame)
         return str(path)
+
+    def _save_overlay_result(
+            self,
+            overlay_image,
+            video_name: str,
+            frame_idx: int,
+            book_name: str
+    ) -> str:
+        overlay_dir = self.cache_dir / "overlay"
+        overlay_dir.mkdir(parents=True, exist_ok=True)
+        filename = f"{video_name}_frame_{frame_idx:06d}_overlay_{book_name}.jpg"
+        full_path = overlay_dir / filename
+        cv2.imwrite(str(full_path), overlay_image)
+        return str(full_path)
 
     def clear_cache(self):
         for file in self.cache_dir.glob("*"):
