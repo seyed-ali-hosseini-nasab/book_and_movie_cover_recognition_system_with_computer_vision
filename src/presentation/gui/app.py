@@ -7,6 +7,7 @@ from .components import (
     ProgressDialog,
     ResultsDisplay
 )
+from src.application.use_cases.overlay_book_cover import OverlayBookCoverUseCase
 from src.application.use_cases.find_matching_book_movie import FindMatchingBookMovieUseCase
 from src.application.use_cases.process_video import ProcessVideoUseCase
 from src.infrastructure.feature_extractors.sift_extractor import SIFTExtractor
@@ -40,6 +41,12 @@ class BookCoverRecognitionApp(ThemedTk):
             matcher=self.matcher,
             image_repository=self.image_repository
         )
+        # new overlay use-case
+        self.overlay_use_case = OverlayBookCoverUseCase(
+            feature_extractor=self.feature_extractor,
+            matcher=self.matcher
+        )
+
         self.video_use_case = None  # will initialize on demand
 
     def create_widgets(self):
@@ -107,6 +114,21 @@ class BookCoverRecognitionApp(ThemedTk):
             mn=0.0, mx=1.0, step=0.05,
             hint="آستانه تغییر هیستوگرام HSV (کمتر→انتخاب فریم‌های بیشتر)"
         )
+
+        # Overlay option
+        overlay_frame = ttk.Frame(settings)
+        overlay_frame.pack(fill=tk.X, pady=5)
+        self.overlay_enabled = tk.BooleanVar(value=True)
+        ttk.Checkbutton(
+            overlay_frame,
+            text="پیدا کردن همپوشانی تصاویر",
+            variable=self.overlay_enabled
+        ).pack(side=tk.RIGHT)
+        ttk.Label(
+            settings,
+            text="نمایش جلد کتاب، روی تصویر ورودی یا فریم ویدئو، در صورت وجود نقاط کلیدی منطبق",
+            font=("Tahoma", 8), foreground="gray"
+        ).pack(fill=tk.X)
 
         # action buttons
         actions = ttk.Frame(container)
@@ -202,26 +224,45 @@ class BookCoverRecognitionApp(ThemedTk):
         threading.Thread(target=self._process_images, args=(imgs[0], books), daemon=True).start()
 
     def _process_images(self, img_path, book_paths):
+        """
+        Process a single input image against all book covers,
+        preserving loop over book_paths so that each cover is compared.
+        """
         self.after(0, self.show_progress_dialog)
         results = []
         total = len(book_paths)
-        for idx, path in enumerate(book_paths, start=1):
-            self.after(0, lambda c=idx, t=total, p=path:
-            self.update_progress(c, t, f"پردازش {os.path.basename(p)}"))
-            res = self.book_movie_use_case.execute_single_comparison(img_path, path)
-            if res:
-                results.append(res)
-        results.sort(key=lambda x: x.confidence_score, reverse=True)
+
+        for idx, book_path in enumerate(book_paths, start=1):
+            # update progress UI
+            self.after(0, lambda c=idx, t=total, p=book_path:
+            self.update_progress(c, t, f"Processing {os.path.basename(p)}"))
+
+            # compare and optionally overlay
+            match = self.book_movie_use_case.execute_single_comparison_with_overlay(
+                input_image_path=img_path,
+                book_image_path=book_path,
+                enable_overlay=self.overlay_enabled.get()
+            )
+            results.append(match)
+
+        # sort matches by confidence descending
+        results.sort(key=lambda r: r.confidence_score, reverse=True)
+
+        # display results including overlay if any
         self.after(0, lambda: self.show_results(img_path, results))
         self.after(0, self.close_progress_dialog)
 
     def start_video_processing(self):
+        """
+        Trigger video processing with current GUI parameters.
+        Initializes the ProcessVideoUseCase and starts a background thread.
+        """
         vids = self.video_selector.selected_paths
-        books = self.book_selector.selected_paths
-        if not vids or not books:
-            messagebox.showwarning("خطا", "لطفاً ویدئو و تصاویر کتاب/فیلم را انتخاب کنید")
+        if not vids:
+            messagebox.showwarning("خطا", "لطفاً ویدئو را انتخاب کنید")
             return
-        # reinitialize video use case with GUI parameters
+
+        # Initialize use case with GUI parameters
         self.video_use_case = ProcessVideoUseCase(
             video_repo=self.video_repository,
             frame_extractor=FrameExtractor(frame_skip=self.frame_skip_var.get()),
@@ -231,20 +272,34 @@ class BookCoverRecognitionApp(ThemedTk):
             phash_thresh=self.phash_var.get(),
             hist_thresh=self.hist_var.get()
         )
-        self.process_vid_btn.config(state='disabled')
-        threading.Thread(target=self._process_video, args=(vids[0],), daemon=True).start()
 
-    def _process_video(self, video_path):
+        self.process_vid_btn.config(state='disabled')
+        threading.Thread(
+            target=self._process_video,
+            args=(os.path.basename(vids[0]),),
+            daemon=True
+        ).start()
+
+    def _process_video(self, video_name):
+        """
+        Run the video processing pipeline in background.
+        Shows progress dialog, invokes use case, then displays results.
+        """
+        # show indeterminate progress
         self.after(0, self.show_progress_dialog)
         self.after(0, lambda: self.progress_dialog.progress.config(mode='indeterminate'))
         self.after(0, lambda: self.progress_dialog.progress.start(10))
 
-        results = self.video_use_case.execute(video_path)
+        # execute video matching use case
+        results = self.video_use_case.execute(video_name)
 
+        # sort matches by confidence descending
+        results.sort(key=lambda r: r.confidence_score, reverse=True)
+
+        # stop progress and display
         self.after(0, lambda: self.progress_dialog.progress.stop())
         self.after(0, self.close_progress_dialog)
-        results.sort(key=lambda x: x.confidence_score, reverse=True)
-        self.after(0, lambda: self.show_results(video_path, results))
+        self.after(0, lambda: self.show_results(video_name, results))
 
     def show_progress_dialog(self):
         self.progress_dialog = ProgressDialog(self, "در حال پردازش")
@@ -271,7 +326,8 @@ class BookCoverRecognitionApp(ThemedTk):
                     matches=res.good_matches_count,
                     rank=rank,
                     error_message=res.error_message,
-                    source_frame_path=res.source_frame_path  # pass frame path for video
+                    source_frame_path=res.source_frame_path,
+                    overlay_image_path=res.overlay_image_path
                 )
             messagebox.showinfo("تکمیل", f"یافت شد {len(results)} تطبیق.")
         self.process_img_btn.config(state='normal')
