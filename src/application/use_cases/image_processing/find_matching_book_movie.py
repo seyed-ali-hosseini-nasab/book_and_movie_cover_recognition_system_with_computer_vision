@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 
 from pathlib import Path
-from src.application.use_cases.overlay_book_cover import OverlayBookCoverUseCase
+from src.application.use_cases.image_processing.overlay_book_cover import OverlayBookCoverUseCase
 from src.domain.entities.book_cover import BookCover
 from src.domain.entities.match_result import MatchResult
 from src.application.interfaces.feature_extractor_interface import IFeatureExtractor
@@ -82,9 +82,9 @@ class FindMatchingBookMovieUseCase:
         """
         Extract keypoints and descriptors for a cover.
         """
-        kp, desc = self.feature_extractor.extract_features(cover.image)
-        cover.keypoints = kp
-        cover.descriptors = desc
+        feature = self.feature_extractor.extract_features(cover.image)
+        cover.keypoints = feature.keypoints
+        cover.descriptors = feature.descriptors
 
     def execute_single_comparison_with_overlay(
             self,

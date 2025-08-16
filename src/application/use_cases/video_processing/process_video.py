@@ -8,7 +8,7 @@ from src.infrastructure.video_processors.frame_extractor import FrameExtractor
 from src.application.interfaces.feature_extractor_interface import IFeatureExtractor
 from src.application.interfaces.matcher_interface import IMatcher
 from src.domain.entities.match_result import MatchResult
-from src.application.use_cases.overlay_book_cover import OverlayBookCoverUseCase
+from src.application.use_cases.image_processing.overlay_book_cover import OverlayBookCoverUseCase
 
 
 class ProcessVideoUseCase:
