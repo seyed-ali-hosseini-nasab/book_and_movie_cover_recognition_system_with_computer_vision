@@ -35,9 +35,10 @@ class OverlayBookCoverUseCase:
             return None
 
         # Extract matched keypoints
-        kp_orig, desc_orig = self.feature_extractor.extract_features(original)
-        kp_book, desc_book = self.feature_extractor.extract_features(book_cover.image)
-
+        feature = self.feature_extractor.extract_features(original)
+        kp_orig = feature.keypoints
+        feature = self.feature_extractor.extract_features(book_cover.image)
+        kp_book = feature.keypoints
         src_pts = np.float32([kp_book[m.trainIdx].pt for m in match_result.matches]).reshape(-1, 1, 2)
         dst_pts = np.float32([kp_orig[m.queryIdx].pt for m in match_result.matches]).reshape(-1, 1, 2)
 
