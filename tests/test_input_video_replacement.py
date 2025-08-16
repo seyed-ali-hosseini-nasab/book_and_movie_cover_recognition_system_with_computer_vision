@@ -12,17 +12,7 @@ from src.infrastructure.feature_extractors.sift_extractor import SIFTExtractor
 from src.infrastructure.matchers.flann_matcher import FLANNMatcher
 from src.infrastructure.repositories.file_image_repository import FileImageRepository
 from src.infrastructure.repositories.file_video_repository import FileVideoRepository
-
-
-def setup_test_environment():
-    """Find project root and configure paths"""
-    current = Path(__file__).resolve()
-    for parent in current.parents:
-        if (parent / "main.py").exists() and (parent / "src").exists():
-            sys.path.insert(0, str(parent))
-            os.chdir(parent)
-            return parent
-    raise FileNotFoundError("Project root not found")
+from tests.utils import setup_test_environment
 
 
 def parallel_processing():
