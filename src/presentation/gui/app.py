@@ -1,5 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
+
+from src.application.use_cases import AsyncFrameProcessor
 from .components import (
     ScrollableFrame,
     ImageSelector,
@@ -7,14 +9,12 @@ from .components import (
     ProgressDialog,
     ResultsDisplay
 )
-from src.application.use_cases.overlay_book_cover import OverlayBookCoverUseCase
-from src.application.use_cases.find_matching_book_movie import FindMatchingBookMovieUseCase
-from src.application.use_cases.process_video import ProcessVideoUseCase
+from src.application.use_cases.image_processing import FindMatchingBookMovieUseCase, OverlayBookCoverUseCase
+from src.application.use_cases.video_processing import ProcessInputVideoUseCase
 from src.infrastructure.feature_extractors.sift_extractor import SIFTExtractor
 from src.infrastructure.matchers.flann_matcher import FLANNMatcher
 from src.infrastructure.repositories.file_image_repository import FileImageRepository
 from src.infrastructure.repositories.file_video_repository import FileVideoRepository
-from src.infrastructure.video_processors.frame_extractor import FrameExtractor
 from ttkthemes import ThemedTk
 import os
 import threading
@@ -36,32 +36,35 @@ class BookCoverRecognitionApp(ThemedTk):
         self.matcher = FLANNMatcher()
         self.image_repository = FileImageRepository()
         self.video_repository = FileVideoRepository()
+
+        # Image processing use cases
         self.book_movie_use_case = FindMatchingBookMovieUseCase(
             feature_extractor=self.feature_extractor,
             matcher=self.matcher,
             image_repository=self.image_repository
         )
-        # new overlay use-case
         self.overlay_use_case = OverlayBookCoverUseCase(
             feature_extractor=self.feature_extractor,
             matcher=self.matcher
         )
 
-        self.video_use_case = None  # will initialize on demand
+        self.frame_processor_async = AsyncFrameProcessor(self.book_movie_use_case, max_workers=6)
+
+        # Video processing use case (init on demand)
+        self.video_use_case = None
 
     def create_widgets(self):
-        # root scrollable frame
         root_scroll = ScrollableFrame(self)
         root_scroll.pack(fill=tk.BOTH, expand=True)
         container = root_scroll.scrollable_frame
         container.columnconfigure(0, weight=1, minsize=1080)
 
-        # settings panel
+        # Settings panel
         settings = ttk.LabelFrame(container, text="تنظیمات ورودی", padding=10)
         settings.grid(row=0, column=0, sticky="ew", padx=20, pady=(20, 10))
         settings.columnconfigure(0, weight=1)
 
-        # input image selector
+        # Image selector
         self.input_selector = ImageSelector(
             settings,
             "تصویر ورودی",
@@ -69,7 +72,6 @@ class BookCoverRecognitionApp(ThemedTk):
         )
         self.input_selector.pack(fill=tk.X, pady=5)
 
-        # book/movie images selector
         self.book_selector = ImageSelector(
             settings,
             "پوشه تصاویر کتاب/فیلم",
@@ -78,59 +80,30 @@ class BookCoverRecognitionApp(ThemedTk):
         )
         self.book_selector.pack(fill=tk.X, pady=5)
 
-        # video selector
+        # Video selector
         self.video_selector = VideoSelector(
             settings,
-            "ویدئوی تریلر",
-            default_path="data/trailers"
+            "ویدئوی ورودی",
+            default_path="data/input_videos"
         )
         self.video_selector.pack(fill=tk.X, pady=5)
 
-        # param controls
-        self.frame_skip_var = tk.IntVar(value=30)
-        self.phash_var = tk.IntVar(value=20)
-        self.hist_var = tk.DoubleVar(value=0.3)
+        # Parameter controls
+        self.frame_skip_var = tk.IntVar(value=1)
+        self.min_conf_var = tk.DoubleVar(value=5.0)
 
         self._build_spinbox(
-            settings,
-            "Frame Skip:",
-            self.frame_skip_var,
+            settings, "Frame Skip:", self.frame_skip_var,
             mn=1, mx=120, step=1,
-            hint="هر چه عدد بیشتر باشد، فریم‌های کمتری پردازش می‌شوند (سرعت↑، دقت↓)"
+            hint="هر چه عدد بیشتر باشد فریم‌های کمتری پردازش می‌شوند"
         )
-
         self._build_spinbox(
-            settings,
-            "pHash Thresh:",
-            self.phash_var,
-            mn=1, mx=64, step=1,
-            hint="ملاک فاصله هامینگ pHash (کمتر→فیلتر سخت‌تر)"
+            settings, "Min Confidence:", self.min_conf_var,
+            mn=0.0, mx=100.0, step=0.5,
+            hint="حداقل مقدار confidence برای تشخیص کتاب"
         )
 
-        self._build_spinbox(
-            settings,
-            "Hist Thresh:",
-            self.hist_var,
-            mn=0.0, mx=1.0, step=0.05,
-            hint="آستانه تغییر هیستوگرام HSV (کمتر→انتخاب فریم‌های بیشتر)"
-        )
-
-        # Overlay option
-        overlay_frame = ttk.Frame(settings)
-        overlay_frame.pack(fill=tk.X, pady=5)
-        self.overlay_enabled = tk.BooleanVar(value=True)
-        ttk.Checkbutton(
-            overlay_frame,
-            text="پیدا کردن همپوشانی تصاویر",
-            variable=self.overlay_enabled
-        ).pack(side=tk.RIGHT)
-        ttk.Label(
-            settings,
-            text="نمایش جلد کتاب، روی تصویر ورودی یا فریم ویدئو، در صورت وجود نقاط کلیدی منطبق",
-            font=("Tahoma", 8), foreground="gray"
-        ).pack(fill=tk.X)
-
-        # action buttons
+        # Action buttons
         actions = ttk.Frame(container)
         actions.grid(row=1, column=0, sticky="ew", padx=20, pady=10)
         actions.columnconfigure(0, weight=1)
@@ -143,37 +116,26 @@ class BookCoverRecognitionApp(ThemedTk):
         self.process_img_btn.pack(side=tk.RIGHT, padx=5)
 
         self.process_vid_btn = ttk.Button(
-            actions, text="تشخیص ویدئو",
+            actions, text="پردازش ویدئو",
             command=self.start_video_processing,
             style="Accent.TButton"
         )
         self.process_vid_btn.pack(side=tk.RIGHT, padx=5)
 
-        ttk.Button(actions, text="پاک کردن نتایج", command=self.clear_results).pack(side=tk.RIGHT, padx=5)
+        ttk.Button(actions, text="پاک کردن نتایج", command=self.clear_results) \
+            .pack(side=tk.RIGHT, padx=5)
 
-        ttk.Button(
-            actions,
-            text="پاک کردن کش",
-            command=self.clear_frame_cache
-        ).pack(side=tk.RIGHT, padx=5)
-
-        # results display
+        # Results display
         self.result_display = ResultsDisplay(container)
         self.result_display.grid(row=2, column=0, sticky="nsew", padx=20, pady=(0, 20))
         container.rowconfigure(2, weight=1)
 
     def _build_spinbox(self, parent, text, var, mn, mx, step, hint):
-        """
-        Build a Spinbox that automatically clamps its value
-        to the [mn, mx] interval and ignores invalid input.
-        """
         frm = ttk.Frame(parent)
         frm.pack(fill=tk.X, pady=5)
         ttk.Label(frm, text=text).pack(side=tk.RIGHT)
 
-        # register validation callback
         def _validator(value_if_edit):
-            # empty string → allow temporarily
             if value_if_edit == "":
                 return True
             try:
@@ -183,20 +145,13 @@ class BookCoverRecognitionApp(ThemedTk):
             return mn <= v <= mx
 
         vcmd = (self.register(_validator), "%P")
-
         spn = ttk.Spinbox(
-            frm,
-            from_=mn,
-            to=mx,
-            increment=step,
-            width=5,
-            textvariable=var,
-            validate="key",
-            validatecommand=vcmd,
+            frm, from_=mn, to=mx, increment=step,
+            width=5, textvariable=var,
+            validate="key", validatecommand=vcmd
         )
         spn.pack(side=tk.RIGHT, padx=5)
 
-        # ensure clamping on focus-loss or <Return>
         def _clamp_event(_):
             try:
                 v = float(var.get())
@@ -209,8 +164,6 @@ class BookCoverRecognitionApp(ThemedTk):
                 var.set(mx)
 
         spn.bind("<FocusOut>", _clamp_event)
-        spn.bind("<Return>", _clamp_event)
-
         ttk.Label(parent, text=hint, font=("Tahoma", 8), foreground="gray") \
             .pack(fill=tk.X)
 
@@ -221,56 +174,47 @@ class BookCoverRecognitionApp(ThemedTk):
             messagebox.showwarning("خطا", "لطفاً تصویر و تصاویر کتاب/فیلم را انتخاب کنید")
             return
         self.process_img_btn.config(state='disabled')
-        threading.Thread(target=self._process_images, args=(imgs[0], books), daemon=True).start()
+        threading.Thread(
+            target=self._process_images,
+            args=(imgs[0], books),
+            daemon=True
+        ).start()
 
     def _process_images(self, img_path, book_paths):
-        """
-        Process a single input image against all book covers,
-        preserving loop over book_paths so that each cover is compared.
-        """
         self.after(0, self.show_progress_dialog)
         results = []
         total = len(book_paths)
-
         for idx, book_path in enumerate(book_paths, start=1):
-            # update progress UI
-            self.after(0, lambda c=idx, t=total, p=book_path:
-            self.update_progress(c, t, f"Processing {os.path.basename(p)}"))
-
-            # compare and optionally overlay
+            self.after(
+                0,
+                lambda c=idx,
+                       t=total,
+                       p=book_path: self.update_progress(c, t, f"Processing {os.path.basename(p)}")
+            )
             match = self.book_movie_use_case.execute_single_comparison_with_overlay(
                 input_image_path=img_path,
                 book_image_path=book_path,
-                enable_overlay=self.overlay_enabled.get()
+                enable_overlay=True
             )
             results.append(match)
-
-        # sort matches by confidence descending
         results.sort(key=lambda r: r.confidence_score, reverse=True)
-
-        # display results including overlay if any
         self.after(0, lambda: self.show_results(img_path, results))
         self.after(0, self.close_progress_dialog)
 
     def start_video_processing(self):
-        """
-        Trigger video processing with current GUI parameters.
-        Initializes the ProcessVideoUseCase and starts a background thread.
-        """
         vids = self.video_selector.selected_paths
         if not vids:
             messagebox.showwarning("خطا", "لطفاً ویدئو را انتخاب کنید")
             return
 
-        # Initialize use case with GUI parameters
-        self.video_use_case = ProcessVideoUseCase(
-            video_repo=self.video_repository,
-            frame_extractor=FrameExtractor(frame_skip=self.frame_skip_var.get()),
+        # Initialize video processing use case
+        self.video_use_case = ProcessInputVideoUseCase(
             feature_extractor=self.feature_extractor,
             matcher=self.matcher,
-            image_repo=self.image_repository,
-            phash_thresh=self.phash_var.get(),
-            hist_thresh=self.hist_var.get()
+            image_repository=self.image_repository,
+            video_repository=self.video_repository,
+            frame_processor=self.frame_processor_async,
+            min_conf=self.min_conf_var.get()
         )
 
         self.process_vid_btn.config(state='disabled')
@@ -281,44 +225,50 @@ class BookCoverRecognitionApp(ThemedTk):
         ).start()
 
     def _process_video(self, video_name):
-        """
-        Run the video processing pipeline in background.
-        Shows progress dialog, invokes use case, then displays results.
-        """
-        # show indeterminate progress
         self.after(0, self.show_progress_dialog)
-        self.after(0, lambda: self.progress_dialog.progress.config(mode='indeterminate'))
-        self.after(0, lambda: self.progress_dialog.progress.start(10))
 
-        # execute video matching use case
-        results = self.video_use_case.execute(video_name)
+        def progress(msg, pct):
+            self.after(0, lambda: self.update_progress(0, 0, msg))
 
-        # sort matches by confidence descending
-        results.sort(key=lambda r: r.confidence_score, reverse=True)
-
-        # stop progress and display
-        self.after(0, lambda: self.progress_dialog.progress.stop())
+        result = self.video_use_case.execute(
+            input_video_name=video_name,
+            progress_callback=progress
+        )
         self.after(0, self.close_progress_dialog)
-        self.after(0, lambda: self.show_results(video_name, results))
+        # Display video processing result
+        if result.success:
+            messagebox.showinfo(
+                "تکمیل",
+                f"📹 ویدئو: {result.source_video_name}\n"
+                f"📖 کتاب: {result.target_book_name}\n"
+                f"🎬 فریم‌های جایگزین: {result.replaced_frames_count}/{result.total_frames_processed}\n"
+                f"⏱ زمان: {result.processing_time_seconds:.1f}s\n"
+                f"💾 خروجی: {result.output_video_path}"
+            )
+        else:
+            messagebox.showerror("خطا", result.error_message)
+
+        self.process_vid_btn.config(state='normal')
 
     def show_progress_dialog(self):
         self.progress_dialog = ProgressDialog(self, "در حال پردازش")
 
     def update_progress(self, current, total, status):
-        if hasattr(self, 'progress_dialog') and self.progress_dialog:
+        if hasattr(self, 'progress_dialog'):
             self.progress_dialog.update_progress(current, total, status)
 
     def close_progress_dialog(self):
-        if hasattr(self, 'progress_dialog') and self.progress_dialog:
+        if hasattr(self, 'progress_dialog'):
             self.progress_dialog.close()
             del self.progress_dialog
 
-    def show_results(self, input_path, results):
+    def show_results(self, input_path, results, max_results=5):
         self.result_display.clear_results()
         if not results:
             messagebox.showinfo("نتیجه", "هیچ تطبیقی یافت نشد")
         else:
-            for rank, res in enumerate(results, start=1):
+            min_res = results[:min(len(results), max_results)]
+            for rank, res in enumerate(min_res, start=1):
                 self.result_display.add_result(
                     input_path=input_path,
                     result_path=res.target_image_path,
@@ -329,21 +279,14 @@ class BookCoverRecognitionApp(ThemedTk):
                     source_frame_path=res.source_frame_path,
                     overlay_image_path=res.overlay_image_path
                 )
-            messagebox.showinfo("تکمیل", f"یافت شد {len(results)} تطبیق.")
+            messagebox.showinfo("تکمیل", f"{len(results)} تطبیق یافت شد و {len(min_res)} تای آن در نتایج قابل مشاهده هستند")
         self.process_img_btn.config(state='normal')
-        self.process_vid_btn.config(state='normal')
 
     def clear_results(self):
         self.result_display.clear_results()
         self.process_img_btn.config(state='normal')
         self.process_vid_btn.config(state='normal')
-
-    def clear_frame_cache(self):
-        if self.video_use_case:
-            self.video_use_case.clear_cache()
-            messagebox.showinfo("تکمیل", "کش ویدئو پاک شد")
-        else:
-            messagebox.showwarning("خطا", "ابتدا یک ویدئو پردازش کنید")
+        self.video_use_case = None
 
 
 if __name__ == "__main__":
