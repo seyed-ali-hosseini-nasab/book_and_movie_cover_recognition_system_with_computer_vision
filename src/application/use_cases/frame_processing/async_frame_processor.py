@@ -49,7 +49,7 @@ class AsyncFrameProcessor(IFrameProcessor):
             # Process chunk asynchronously
             chunk_results = await self._process_chunk_async(
                 video_path, chunk_start, chunk_end, trailer_frames,
-                feature_book, base_homography, w, h, alpha
+                book_image, feature_book, base_homography, w, h, alpha
             )
 
             # Write results in order
@@ -71,6 +71,7 @@ class AsyncFrameProcessor(IFrameProcessor):
             start: int,
             end: int,
             trailer_frames: List,
+            book_image,
             feature_book,
             base_homography,
             w: int,
@@ -87,8 +88,8 @@ class AsyncFrameProcessor(IFrameProcessor):
             task = loop.run_in_executor(
                 self.executor,
                 self._process_frame_by_index,
-                video_path, idx, trailer_frames, feature_book,
-                base_homography, w, h, alpha
+                video_path, idx, trailer_frames, book_image,
+                feature_book, base_homography, w, h, alpha
             )
             tasks.append(task)
 
@@ -111,6 +112,7 @@ class AsyncFrameProcessor(IFrameProcessor):
             video_path: str,
             frame_idx: int,
             trailer_frames: List,
+            book_image,
             feature_book,
             base_homography,
             w: int,
@@ -131,13 +133,16 @@ class AsyncFrameProcessor(IFrameProcessor):
         # Get trailer frame
         tr_frame = trailer_frames[min(frame_idx, len(trailer_frames) - 1)]
         tr_frame = cv2.rotate(tr_frame, cv2.ROTATE_90_CLOCKWISE)
+        # Resize the trailer
+        h_book, w_book = book_image.shape[:2]
+        tr_resized = cv2.resize(tr_frame, (w_book, h_book), interpolation=cv2.INTER_CUBIC)
 
         # Compute homography
         current_H = self._compute_homography_for_frame(frame, feature_book, base_homography)
 
         # Warp and blend
         warped = cv2.warpPerspective(
-            tr_frame, current_H, (w, h),
+            tr_resized, current_H, (w, h),
             flags=cv2.INTER_LINEAR,
             borderMode=cv2.BORDER_TRANSPARENT
         )
