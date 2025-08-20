@@ -131,9 +131,9 @@ dmypy.json
 # PyCharm
 .idea
 
-data/trailers/*
+data/trailers/*.mp4
 data/cache
-data/input_videos/*
+data/input_videos/*.mp4
 data/tests
 data/output_videos
 data/temp
