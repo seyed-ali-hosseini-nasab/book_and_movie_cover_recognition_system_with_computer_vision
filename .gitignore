@@ -137,3 +137,4 @@ data/input_videos/*.mp4
 data/tests
 data/output_videos
 data/temp
+data/output_images
