@@ -50,8 +50,7 @@ src/
 ├── infrastructure/
 │   ├── feature_extractors/ # SIFT
 │   ├── matchers/ # FLANN
-│   ├── repositories/ # مدیریت فایل ها
-│   └── video_processors/ # پردازش ویدئو
+│   └── repositories/ # مدیریت فایل ها
 └── presentation/
     └── gui/                # اپلیکیشن دسکتاپ با Tkinter
 tests/                      # تست‌های واحد و انتها-به-انتها
