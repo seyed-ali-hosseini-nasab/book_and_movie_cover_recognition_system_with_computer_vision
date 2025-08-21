@@ -88,6 +88,15 @@ class BookCoverRecognitionApp(ThemedTk):
         )
         self.video_selector.pack(fill=tk.X, pady=5)
 
+        # Parameter controls
+        self.min_conf_var = tk.DoubleVar(value=5.0)
+
+        self._build_spinbox(
+            settings, "Min Confidence:", self.min_conf_var,
+            mn=0.0, mx=100.0, step=0.5,
+            hint="حداقل مقدار confidence برای تشخیص کتاب"
+        )
+
         # Action buttons
         actions = ttk.Frame(container)
         actions.grid(row=1, column=0, sticky="ew", padx=20, pady=10)
@@ -264,7 +273,8 @@ class BookCoverRecognitionApp(ThemedTk):
                     source_frame_path=res.source_frame_path,
                     overlay_image_path=res.overlay_image_path
                 )
-            messagebox.showinfo("تکمیل", f"{len(results)} تطبیق یافت شد و {len(min_res)} تای آن در نتایج قابل مشاهده هستند")
+            messagebox.showinfo("تکمیل",
+                                f"{len(results)} تطبیق یافت شد و {len(min_res)} تای آن در نتایج قابل مشاهده هستند")
         self.process_img_btn.config(state='normal')
 
     def clear_results(self):

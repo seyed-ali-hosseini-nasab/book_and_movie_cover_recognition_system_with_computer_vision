@@ -15,7 +15,7 @@ python src/presentation/gui/main.py
 ## پردازش ویدئو (Video Processing)
 1. قرار دادن ویدئو تست در `data/input_videos/`.
 2. در GUI یا خط فرمان وارد بخش **پردازش ویدئو** شوید.
-3. ویدئو را انتخاب کنید.
+3. ویدئو را انتخاب و مقدار Min Confidence را مشخص کنید.
 4. روی **پردازش ویدئو** کلیک کنید.
 5. خروجی در `data/output_videos/` ذخیره می‌شود.
 
