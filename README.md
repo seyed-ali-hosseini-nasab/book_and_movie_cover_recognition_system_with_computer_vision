@@ -34,19 +34,23 @@ data/
 ├── input_videos/           # ویدئوهای ورودی برای پردازش
 ├── trailers/               # ویدئوهای تریلر
 ├── output_videos/          # ویدئوهای خروجی پردازش‌شده
+├── cache/input_images_overlay_results/ # نتایج همپوشانی تصویر ورودی
+├── temp/ # برای ذخیره فریم های ویدئو ورودی، بعد از انجام پردازش پاک می شوند
 └── book_trailer_mapping.json  # نگاشت کتاب → فایل تریلر
 src/
 ├── application/
-│   ├── interfaces/         # اینترفیس‌ها
+│   ├── interfaces/         # رابطهای انتزاعی
 │   └── use_cases/
 │       ├── image_processing/
 │       ├── video_processing/
 │       └── frame_processing/
 ├── domain/
-│   └── entities/           # موجودیت‌ها (VideoReplacementResult)
+│   └── entities/           # موجودیت‌های اصلی
 ├── infrastructure/
-│   ├── feature_extractors/
-│   └── repositories/
+│   ├── feature_extractors/ # SIFT
+│   ├── matchers/ # FLANN
+│   ├── repositories/ # مدیریت فایل ها
+│   └── video_processors/ # پردازش ویدئو
 └── presentation/
     └── gui/                # اپلیکیشن دسکتاپ با Tkinter
 tests/                      # تست‌های واحد و انتها-به-انتها
