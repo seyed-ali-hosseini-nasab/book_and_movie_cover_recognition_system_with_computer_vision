@@ -88,21 +88,6 @@ class BookCoverRecognitionApp(ThemedTk):
         )
         self.video_selector.pack(fill=tk.X, pady=5)
 
-        # Parameter controls
-        self.frame_skip_var = tk.IntVar(value=1)
-        self.min_conf_var = tk.DoubleVar(value=5.0)
-
-        self._build_spinbox(
-            settings, "Frame Skip:", self.frame_skip_var,
-            mn=1, mx=120, step=1,
-            hint="هر چه عدد بیشتر باشد فریم‌های کمتری پردازش می‌شوند"
-        )
-        self._build_spinbox(
-            settings, "Min Confidence:", self.min_conf_var,
-            mn=0.0, mx=100.0, step=0.5,
-            hint="حداقل مقدار confidence برای تشخیص کتاب"
-        )
-
         # Action buttons
         actions = ttk.Frame(container)
         actions.grid(row=1, column=0, sticky="ew", padx=20, pady=10)
