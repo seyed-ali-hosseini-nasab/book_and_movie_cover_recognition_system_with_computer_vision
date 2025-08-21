@@ -1,7 +1,9 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
-
+from pathlib import Path
+import shutil
 from src.application.use_cases import AsyncFrameProcessor
+from src.domain.entities.match_result import MatchResult
 from .components import (
     ScrollableFrame,
     ImageSelector,
@@ -23,7 +25,7 @@ import threading
 class BookCoverRecognitionApp(ThemedTk):
     def __init__(self):
         super().__init__(theme="arc")
-        self.title("سیستم تشخیص جلد کتاب و ویدئو")
+        self.title("سیستم تشخیص جلد کتاب و فیلم با بینایی کامپیوتر")
         self.minsize(1080, 720)
         self.geometry("1080x720")
         self.option_add("*Font", "Tahoma 10")
@@ -68,7 +70,7 @@ class BookCoverRecognitionApp(ThemedTk):
         self.input_selector = ImageSelector(
             settings,
             "تصویر ورودی",
-            default_path="data/input_images/Return.jpg"
+            default_path="data/input_images/Fellowship.jpeg"
         )
         self.input_selector.pack(fill=tk.X, pady=5)
 
@@ -119,6 +121,12 @@ class BookCoverRecognitionApp(ThemedTk):
         ttk.Button(actions, text="پاک کردن نتایج", command=self.clear_results) \
             .pack(side=tk.RIGHT, padx=5)
 
+        ttk.Button(
+            actions,
+            text="پاک کردن کش تصاویر",
+            command=self.clear_overlay_cache
+        ).pack(side=tk.RIGHT, padx=5)
+
         # Results display
         self.result_display = ResultsDisplay(container)
         self.result_display.grid(row=2, column=0, sticky="nsew", padx=20, pady=(0, 20))
@@ -161,6 +169,25 @@ class BookCoverRecognitionApp(ThemedTk):
         ttk.Label(parent, text=hint, font=("Tahoma", 8), foreground="gray") \
             .pack(fill=tk.X)
 
+    def clear_overlay_cache(self):
+        """Clear overlay images cache directory"""
+        try:
+            cache_dir = Path("data/cache/input_images_overlay_results")
+
+            if cache_dir.exists():
+                # Remove all files and subdirectories
+                shutil.rmtree(cache_dir)
+
+                # Recreate the empty directory
+                cache_dir.mkdir(parents=True, exist_ok=True)
+
+                messagebox.showinfo("تکمیل", f"کش تصاویر پاک شد\nمسیر: {cache_dir}")
+            else:
+                messagebox.showinfo("اطلاعات", f"پوشه کش وجود ندارد\nمسیر: {cache_dir}")
+
+        except Exception as e:
+            messagebox.showerror("خطا", f"خطا در پاک کردن کش تصاویر:\n{str(e)}")
+
     def start_image_processing(self):
         imgs = self.input_selector.selected_paths
         books = self.book_selector.selected_paths
@@ -179,21 +206,57 @@ class BookCoverRecognitionApp(ThemedTk):
         results = []
         total = len(book_paths)
         for idx, book_path in enumerate(book_paths, start=1):
+            # update progress UI
             self.after(
                 0,
                 lambda c=idx,
                        t=total,
                        p=book_path: self.update_progress(c, t, f"Processing {os.path.basename(p)}")
             )
+
+            # compare and optionally overlay
             match = self.book_movie_use_case.execute_single_comparison_with_overlay(
                 input_image_path=img_path,
                 book_image_path=book_path,
                 enable_overlay=True
             )
             results.append(match)
+
+        # sort matches by confidence descending
         results.sort(key=lambda r: r.confidence_score, reverse=True)
+
+        # Save best result to output_images directory
+        if results and results[0].overlay_image_path:
+            self._save_best_result_image(results[0])
+
+        # display results including overlay if any
         self.after(0, lambda: self.show_results(img_path, results))
         self.after(0, self.close_progress_dialog)
+
+    def _save_best_result_image(self, best_result: MatchResult):
+        """
+        Save the best matching result image to output_images directory
+        """
+        try:
+            # Create output directory
+            output_dir = Path("data/output_images")
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+            # Generate output filename based on input and best match
+            input_name = best_result.source_name
+            target_name = best_result.target_name
+            output_filename = f"{input_name}_overlay_{target_name}.jpg"
+            output_path = output_dir / output_filename
+
+            # Copy overlay image if exists
+            if best_result.overlay_image_path and os.path.exists(best_result.overlay_image_path):
+                shutil.copy2(best_result.overlay_image_path, str(output_path))
+                print(f"💾 Best match saved: {output_path}")
+            else:
+                print(f"⚠️ No overlay image to save for best match")
+
+        except Exception as e:
+            print(f"❌ Error saving best result: {e}")
 
     def start_video_processing(self):
         vids = self.video_selector.selected_paths
