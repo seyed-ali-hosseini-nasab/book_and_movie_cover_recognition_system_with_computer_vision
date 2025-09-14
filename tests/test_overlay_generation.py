@@ -11,7 +11,7 @@ def test_overlay_comparison():
     print("🔍 Testing Comparison Image Creation...")
 
     input_image = "data/input_images/Tower.jpg"
-    book_image = "data/book_movie_images/The_Lord_Of_The_Rings_Towers_book.png"
+    book_image = "data/book_images/The_Lord_Of_The_Rings_Towers_book.png"
 
     setup_test_environment()
 

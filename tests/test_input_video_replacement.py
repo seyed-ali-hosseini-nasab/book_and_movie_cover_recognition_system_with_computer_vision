@@ -22,7 +22,7 @@ def parallel_processing():
     setup_test_environment()
 
     # Verify directories
-    for d in ["data/input_images", "data/book_movie_images", "data/trailers", "data/input_videos"]:
+    for d in ["data/input_images", "data/book_images", "data/trailers", "data/input_videos"]:
         assert os.path.isdir(d), f"Required directory missing: {d}"
         print(f"✅ Found directory: {d}")
 

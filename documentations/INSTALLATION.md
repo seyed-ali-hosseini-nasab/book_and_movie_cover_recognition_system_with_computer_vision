@@ -27,7 +27,7 @@ pip install -r requirements.txt
 
 
 4. تنظیم فایل نگاشت کتاب به تریلر:
-فایل `data/book_trailer_mapping.json` را بررسی و در صورت نیاز کلیدها (نام کتاب) را با نام فایل‌های جلد در پوشه `data/book_movie_images` یکسان کنید.
+فایل `data/book_trailer_mapping.json` را بررسی و در صورت نیاز کلیدها (نام کتاب) را با نام فایل‌های جلد در پوشه `data/book_images` یکسان کنید.
 
 5. راه‌اندازی GUI یا خط فرمان:
 - اجرای واسط گرافیکی:
