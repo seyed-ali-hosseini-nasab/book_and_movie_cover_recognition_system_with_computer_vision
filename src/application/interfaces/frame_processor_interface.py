@@ -18,7 +18,7 @@ class IFrameProcessor(ABC):
             fps: float,
             w: int,
             h: int,
-            alpha: float = 0.7,
+            alpha: float,
             progress_callback: Optional[Callable] = None
     ):
         """Process video frames and return count of replaced frames"""

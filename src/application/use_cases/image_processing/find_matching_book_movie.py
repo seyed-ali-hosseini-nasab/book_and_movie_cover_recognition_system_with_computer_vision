@@ -105,9 +105,14 @@ class FindMatchingBookMovieUseCase:
             input_img = cv2.imread(input_image_path)
             cover = self._load_cover(book_image_path, is_input=False)
 
+            # Find movie cover from book cover
+            movie_image_path = self.image_repository.get_movie_image_for_book(cover.name)
+
+            movie_cover = self._load_cover(movie_image_path, is_input=False)
+
             # generate overlay using homography
             overlayed = self.overlay_use_case.overlay_book_on_image(
-                input_img, cover, result
+                input_img, cover, movie_cover, result
             )
 
             # save overlay result and record its path

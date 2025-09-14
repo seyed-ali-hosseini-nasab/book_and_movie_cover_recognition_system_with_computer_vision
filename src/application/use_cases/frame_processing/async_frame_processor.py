@@ -27,7 +27,7 @@ class AsyncFrameProcessor(IFrameProcessor):
             fps: float,
             w: int,
             h: int,
-            alpha: float = 0.7,
+            alpha: float,
             progress_callback: Optional[Callable] = None
     ) -> int:
         """Process frames asynchronously"""

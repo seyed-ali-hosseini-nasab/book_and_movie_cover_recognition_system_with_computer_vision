@@ -24,6 +24,7 @@ class OverlayBookCoverUseCase:
             self,
             original: np.ndarray,
             book_cover: BookCover,
+            movie_cover: BookCover,
             match_result: MatchResult,
             min_matches: int = 10
     ) -> Optional[np.ndarray]:
@@ -46,9 +47,12 @@ class OverlayBookCoverUseCase:
         if homography is None:
             return None
 
+        h_book, w_book = book_cover.image.shape[:2]
+        movie_image_resized = cv2.resize(movie_cover.image, (w_book, h_book), interpolation=cv2.INTER_CUBIC)
+
         h, w = original.shape[:2]
         warped = cv2.warpPerspective(
-            book_cover.image, homography, (w, h),
+            movie_image_resized, homography, (w, h),
             flags=cv2.INTER_LINEAR,
             borderMode=cv2.BORDER_TRANSPARENT
         )
@@ -56,7 +60,7 @@ class OverlayBookCoverUseCase:
         # Create mask of warped area
         mask = (warped.sum(axis=2) > 0).astype(np.uint8) * 255
         mask_3c = cv2.merge([mask, mask, mask])
-        alpha = 0.7
+        alpha = 1
 
         # Blend overlay with original
         blended = (original.astype(np.float32) * (1 - alpha * (mask_3c / 255.0)) +

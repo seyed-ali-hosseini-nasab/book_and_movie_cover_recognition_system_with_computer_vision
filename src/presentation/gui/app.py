@@ -77,7 +77,7 @@ class BookCoverRecognitionApp(ThemedTk):
         self.book_selector = ImageSelector(
             settings,
             "پوشه تصاویر کتاب/فیلم",
-            default_path="data/book_movie_images",
+            default_path="data/book_images",
             is_folder=True
         )
         self.book_selector.pack(fill=tk.X, pady=5)

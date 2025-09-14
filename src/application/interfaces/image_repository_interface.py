@@ -11,3 +11,7 @@ class IImageRepository(ABC):
     @abstractmethod
     def load_book_movie_images(self) -> List[BookCover]:
         pass
+
+    @abstractmethod
+    def get_movie_image_for_book(self, path: str) -> BookCover:
+        pass

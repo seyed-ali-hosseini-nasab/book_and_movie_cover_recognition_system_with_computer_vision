@@ -27,7 +27,7 @@ class ParallelFrameProcessor(IFrameProcessor):
             fps: float,
             w: int,
             h: int,
-            alpha: float = 0.7,
+            alpha: float,
             progress_callback: Optional[Callable] = None
     ) -> int:
         """Process frames in parallel and write sequentially"""
